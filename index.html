@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Электронная очередь</title>
+    <link rel="manifest" href="manifest.json">
+    <link rel="stylesheet" href="style.css">
+    <link rel="icon" href="icons/icon-192.png" type="image/png">
+    <link rel="apple-touch-icon" href="icons/icon-192.png">
+</head>
+<body>
+    <!-- Экран выбора события -->
+    <div id="screen-event" class="screen active">
+        <h1>Выберите событие:</h1>
+        <div id="event-list">
+            <button id="btn-event-rostics" class="event-button selected">Rostics x Honkai star rail</button>
+        </div>
+        <div class="username-block">
+            <textarea id="username-input" rows="2"></textarea>
+        </div>
+        <button id="btn-next" class="primary-button">Далее</button>
+        <button id="btn-info" class="secondary-button">Подробная информация и правила события/ивента</button>
+    </div>
+
+    <!-- Экран выбора города -->
+    <div id="screen-city" class="screen">
+        <h1>Выберите город:</h1>
+        <button id="btn-city-msk" class="city-button">Москва</button>
+        <button id="btn-city-spb" class="city-button">Санкт-Петербург</button>
+    </div>
+
+    <!-- Экран очереди -->
+    <div id="screen-queue" class="screen">
+        <div id="queue-event-name" class="queue-label"></div>
+        <div id="queue-timer" class="queue-label"></div>
+        <div id="queue-status" class="queue-label"></div>
+        <div id="queue-position" class="queue-label"></div>
+        <div id="queue-buttons">
+            <button id="btn-join" class="action-button">Встать в очередь</button>
+            <button id="btn-received" class="action-button">Получил заказ</button>
+            <button id="btn-here" class="action-button">Я здесь</button>
+            <button id="btn-leave" class="action-button">Покинуть очередь</button>
+            <button id="btn-participants" class="action-button">Список участников</button>
+        </div>
+        <div id="queue-note" class="note-text">
+            *Просим вас не забывать нажать кнопку "Покинуть очередь" или "Забрал заказ" для корректной работы приложения. Убедительная просьба не закрывать приложение если вы находитесь в очереди, для корректной работы. Свернуть приложение можно :)
+        </div>
+    </div>
+
+    <!-- Экран списка участников -->
+    <div id="screen-participants" class="screen">
+        <h1>Список участников</h1>
+        <div id="participants-list" class="participants-container"></div>
+        <button id="btn-back" class="secondary-button">Назад</button>
+    </div>
+
+    <!-- Модальное окно информации -->
+    <div id="modal-info" class="modal">
+        <div class="modal-content">
+            <h2>Подробная информация и правила</h2>
+            <div id="modal-info-text" class="modal-text"></div>
+            <a href="https://t.me/hoyoverse_events_russia/1583?single" target="_blank" class="link-button">Открыть фотографии мерча</a>
+            <button id="btn-close-modal" class="secondary-button">Закрыть</button>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+    <script src="app.js"></script>
+</body>
+      </html>
