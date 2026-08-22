@@ -21,7 +21,7 @@ body {
     width: 100%;
     max-width: 500px;
     flex-direction: column;
-    gap: 12px;
+    gap: 10px;
 }
 
 .screen.active {
@@ -29,7 +29,7 @@ body {
 }
 
 h1 {
-    font-size: 2.2rem;
+    font-size: 1.8rem;        /* было 2.2rem */
     font-weight: bold;
     margin-bottom: 8px;
 }
@@ -37,8 +37,8 @@ h1 {
 .event-button, .city-button, .action-button, .primary-button, .secondary-button {
     display: block;
     width: 100%;
-    padding: 14px;
-    font-size: 1.5rem;
+    padding: 10px 14px;
+    font-size: 1.3rem;        /* было 1.5rem */
     border: none;
     border-radius: 8px;
     cursor: pointer;
@@ -62,35 +62,35 @@ h1 {
 .primary-button {
     background-color: #4caf50;
     color: white;
-    font-size: 1.6rem;
+    font-size: 1.4rem;        /* было 1.6rem */
 }
 
 .secondary-button {
     background-color: #f0f0f0;
     color: #000;
-    font-size: 1.4rem;
+    font-size: 1.2rem;        /* было 1.4rem */
 }
 
 .username-block textarea {
     width: 100%;
-    min-height: 100px;
-    padding: 12px;
-    font-size: 1.4rem;
+    min-height: 80px;
+    padding: 10px;
+    font-size: 1.2rem;        /* было 1.4rem */
     border: 1px solid #ccc;
     border-radius: 6px;
     resize: vertical;
 }
 
 .queue-label {
-    font-size: 1.8rem;
+    font-size: 1.5rem;        /* было 1.8rem */
     font-weight: bold;
-    margin-bottom: 6px;
+    margin-bottom: 4px;
 }
 
 .note-text {
-    font-size: 1.2rem;
+    font-size: 1rem;          /* было 1.2rem */
     color: #808080;
-    margin-top: 10px;
+    margin-top: 8px;
     white-space: pre-wrap;
     text-align: center;
 }
@@ -122,11 +122,11 @@ h1 {
     overflow-y: auto;
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: 10px;
 }
 
 .modal-text {
-    font-size: 1.5rem;
+    font-size: 1.3rem;        /* было 1.5rem */
     line-height: 1.4;
     white-space: pre-wrap;
 }
@@ -135,11 +135,11 @@ h1 {
     display: block;
     background-color: #2196f3;
     color: white;
-    padding: 12px;
+    padding: 10px;
     text-align: center;
     border-radius: 6px;
     text-decoration: none;
-    font-size: 1.3rem;
+    font-size: 1.1rem;        /* было 1.3rem */
 }
 
 .participants-container {
@@ -154,8 +154,8 @@ h1 {
     background: #e0e0e0;
     border: none;
     border-radius: 6px;
-    padding: 12px;
-    font-size: 1.4rem;
+    padding: 10px;
+    font-size: 1.2rem;        /* было 1.4rem */
     text-align: left;
     cursor: pointer;
 }
