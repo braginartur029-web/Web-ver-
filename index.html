@@ -10,14 +10,28 @@
     <link rel="apple-touch-icon" href="icons/icon-192.png">
 </head>
 <body>
+    <!-- Экран отказа от ответственности -->
+    <div id="screen-disclaimer" class="screen active">
+        <h1>Отказ от ответственности</h1>
+        <div class="disclaimer-text">
+            Не является официальным приложением очереди. Уважительно относитесь к тем, кто не хочет поддержать инициативу и проходит мероприятие по официальным условиям.<br><br>
+            Приложение не собирает данные о вас и не передаёт их разработчикам, а также не передаёт намеренно третьим лицам.<br><br>
+            Приложение не было создано с целью и/или не имеет каких-либо средств/инструментов для монетизации/заработка.<br><br>
+            Подключение осуществляется через broker.emqx.io и github.com.<br><br>
+            Изображения, использованные в приложении, сгенерированы нейросетями.
+        </div>
+        <button id="btn-accept-disclaimer" class="primary-button">Принять и продолжить</button>
+    </div>
+
     <!-- Экран выбора события -->
-    <div id="screen-event" class="screen active">
+    <div id="screen-event" class="screen">
         <h1>Выберите событие:</h1>
         <div id="event-list">
-            <button id="btn-event-rostics" class="event-button selected">Rostics x Honkai star rail</button>
+            <button id="btn-event-vkusno" class="event-button selected">Вкусно и точка x Genshin Impact</button>
         </div>
         <div class="username-block">
-            <textarea id="username-input" rows="2"></textarea>
+            <textarea id="username-input" rows="2" placeholder="Введите ваш Telegram username (например, @ivan)
+Вы можете написать после @ всё что хотите, если нет желания чтобы другие знали ваш аккаунт в telegram"></textarea>
         </div>
         <button id="btn-next" class="primary-button">Далее</button>
         <button id="btn-info" class="secondary-button">Подробная информация и правила события/ивента</button>
@@ -53,14 +67,15 @@
         <h1>Список участников</h1>
         <div id="participants-list" class="participants-container"></div>
         <button id="btn-back" class="secondary-button">Назад</button>
+        <button id="btn-update-list" class="secondary-button">Обновить</button>
     </div>
 
     <!-- Модальное окно информации -->
     <div id="modal-info" class="modal">
         <div class="modal-content">
-            <h2>Подробная информация и правила</h2>
+            <h2>Информация и правила</h2>
             <div id="modal-info-text" class="modal-text"></div>
-            <a href="https://t.me/hoyoverse_events_russia/1583?single" target="_blank" class="link-button">Открыть фотографии мерча</a>
+            <a href="https://t.me/hoyoverse_events_russia/1650" target="_blank" class="link-button">Открыть фотографии мерча</a>
             <button id="btn-close-modal" class="secondary-button">Закрыть</button>
         </div>
     </div>
@@ -68,4 +83,4 @@
     <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
     <script src="app.js"></script>
 </body>
-      </html>
+</html>
