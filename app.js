@@ -1,8 +1,8 @@
 // Конфигурация события (время московское)
 const EVENT = {
-    id: 'rostics_hsr_2026',
-    name: 'Rostics x Honkai star rail',
-    startTime: new Date('2026-08-16T09:00:00+03:00')
+    id: 'vkusno_i_tochka_genshin_2026',
+    name: 'Вкусно и точка x Genshin Impact',
+    startTime: new Date('2026-08-25T11:00:00+03:00')
 };
 
 // Состояние
@@ -22,6 +22,7 @@ let mqttClient;
 let timerInterval;
 
 // DOM элементы
+const screenDisclaimer = document.getElementById('screen-disclaimer');
 const screenEvent = document.getElementById('screen-event');
 const screenCity = document.getElementById('screen-city');
 const screenQueue = document.getElementById('screen-queue');
@@ -30,10 +31,10 @@ const modalInfo = document.getElementById('modal-info');
 
 const usernameInput = document.getElementById('username-input');
 usernameInput.value = myUsername;
-usernameInput.placeholder = 'Введите ваш Telegram username (например, @ivan)\nВы можете написать после @ всё что хотите, если нет желания чтобы другие знали ваш аккаунт в telegram';
 
 // Инициализация
-document.getElementById('btn-event-rostics').addEventListener('click', () => selectEvent(EVENT));
+document.getElementById('btn-accept-disclaimer').addEventListener('click', acceptDisclaimer);
+document.getElementById('btn-event-vkusno').addEventListener('click', () => selectEvent(EVENT));
 document.getElementById('btn-next').addEventListener('click', () => {
     const username = usernameInput.value.trim().split('\n')[0].trim();
     if (!username) {
@@ -54,24 +55,16 @@ document.getElementById('btn-join').addEventListener('click', joinQueue);
 document.getElementById('btn-received').addEventListener('click', () => sendAction('received'));
 document.getElementById('btn-here').addEventListener('click', () => sendAction('here'));
 document.getElementById('btn-leave').addEventListener('click', () => sendAction('leave'));
-document.getElementById('btn-participants').addEventListener('click', () => showScreen('screen-participants'));
+document.getElementById('btn-participants').addEventListener('click', showParticipants);
 document.getElementById('btn-back').addEventListener('click', () => showScreen('screen-queue'));
+document.getElementById('btn-update-list').addEventListener('click', showParticipants);
 
 // Модальное окно информации
-const infoText = `Ивент дни в Санкт-Петербурге и Москве 15 и 16 августа
-Адрес в Москве: Rostics Парк Горького
-Адрес в СПБ: Rostics Каменноостровский пр., д.37
-Экспресс комбо считаются только в одном чеке. Вам понадобится предъявить чек/коробки.
-1 комбо - голографический билет
-2 комбо - билет + стикерпак
-3 комбо - билет + стикерпак + акриловый стенд
-Если взять латте в комбо, можно получить капхоледр с Химеко Нова
-Если сделать фото с косплеерами и выложить его с хештегом #HSRxROSTICS вы получите открытку коллаборации
-Также не забудьте привязать аккаунт в приложении, чтобы получить нефрит
-Раньше была официальная информация что будет розыгрыш мерча за покупку 1 комбо, но по всей видимости розыгрыш отменили
-Первые 50 косплееров (не закос) получили акриловые стенды (по слухам количество увеличили до 100)
-Мерч выдают с 10.00 до 19.00 включительно
-Фотографии мерча: https://t.me/hoyoverse_events_russia/1583?single`;
+const infoText = `Объявлены оффлайн-дни коллаборации Genshin Impact и «Вкусно и Точка» в Москве и Санкт-Петербурге!
+Москва: 25 августа 12:00-18:00 ул. Азовская, д. 36
+26 августа с 12:00-18:00 ул. Азовская, д. 36 и ул. Складочная 1стр 31 26го (2 точки)
+Санкт-Петербург: 25 и 26 августа с 12:00-18:00 пл. Стачек, д. 9, стр. 1
+Косплееры будут присутствовать на точках с 12:00 до 18:00`;
 document.getElementById('modal-info-text').textContent = infoText;
 
 // Функции переключения экранов
@@ -86,9 +79,7 @@ function showInfoModal() {
 
 function selectEvent(event) {
     selectedEvent = event;
-    // Визуально выделяем кнопку
-    document.querySelectorAll('.event-button').forEach(btn => btn.classList.remove('selected'));
-    document.getElementById('btn-event-rostics').classList.add('selected');
+    document.getElementById('btn-event-vkusno').classList.add('selected');
 }
 
 function selectCity(city) {
@@ -96,6 +87,11 @@ function selectCity(city) {
     connectMQTT();
     showScreen('screen-queue');
     updateQueueUI();
+}
+
+function acceptDisclaimer() {
+    localStorage.setItem('disclaimer_accepted', '1');
+    showScreen('screen-event');
 }
 
 // Генерация UUID
@@ -122,8 +118,6 @@ function connectMQTT() {
         mqttClient.subscribe(`${base}/join`);
         mqttClient.subscribe(`${base}/action`);
         mqttClient.subscribe(`${base}/snapshot`);
-        // Запрос актуального снапшота
-        // (будет автоматически получен из retained топика)
     });
 
     mqttClient.on('message', (topic, payload) => {
@@ -144,13 +138,11 @@ function connectMQTT() {
 
     mqttClient.on('close', () => {
         console.log('MQTT disconnected');
-        // Попытка переподключения через 5 секунд
         setTimeout(() => {
             if (selectedCity) connectMQTT();
         }, 5000);
     });
 
-    // Таймер обновления UI
     if (timerInterval) clearInterval(timerInterval);
     timerInterval = setInterval(updateQueueUI, 1000);
 }
@@ -241,7 +233,6 @@ function joinQueue() {
         nonce: Math.floor(Math.random() * 1e15)
     };
     mqttClient.publish(`event/${currentEventId}/${currentCity}/join`, JSON.stringify(joinMsg), { qos: 0 });
-    // Локально добавляем себя
     addOrUpdateParticipant({
         client_id: myClientId,
         username: myUsername,
@@ -263,7 +254,6 @@ function sendAction(actionType) {
         city: currentCity
     };
     mqttClient.publish(`event/${currentEventId}/${currentCity}/action`, JSON.stringify(actionMsg), { qos: 0 });
-    // Локально применяем действие
     if (actionType === 'received' || actionType === 'here') applyAction(myClientId, actionType);
     if (actionType === 'leave') {
         participants = participants.filter(p => p.client_id !== myClientId);
@@ -273,7 +263,6 @@ function sendAction(actionType) {
 }
 
 function updateQueueUI() {
-    // Таймер
     const now = new Date();
     const start = EVENT.startTime;
     const diff = Math.max(0, start - now);
@@ -281,7 +270,7 @@ function updateQueueUI() {
     const hours = String(Math.floor(totalSeconds / 3600)).padStart(2, '0');
     const minutes = String(Math.floor((totalSeconds % 3600) / 60)).padStart(2, '0');
     const seconds = String(totalSeconds % 60).padStart(2, '0');
-    document.getElementById('queue-event-name').textContent = `Событие: ${EVENT.name}`;
+    document.getElementById('queue-event-name').textContent = EVENT.name;
     document.getElementById('queue-timer').textContent = now < start ? `До начала: ${hours}:${minutes}:${seconds}` : 'Очередь открыта';
 
     const myParticipant = participants.find(p => p.client_id === myClientId);
@@ -294,13 +283,12 @@ function updateQueueUI() {
         statusText = `Ваш статус: ${statusMap[status]}`;
         const activeParticipants = participants.filter(p => p.status === 'waiting').sort((a,b) => (a.ts - b.ts) || (a.nonce - b.nonce));
         const pos = activeParticipants.findIndex(p => p.client_id === myClientId);
-        if (pos !== -1) positionText = `Ваш номер: ${pos + 1}`;
+        if (pos !== -1) positionText = `Ваш номер: #${pos + 1}`;
     }
 
     document.getElementById('queue-status').textContent = statusText;
     document.getElementById('queue-position').textContent = positionText;
 
-    // Кнопки
     const joinBtn = document.getElementById('btn-join');
     const receivedBtn = document.getElementById('btn-received');
     const hereBtn = document.getElementById('btn-here');
@@ -332,8 +320,7 @@ function updateQueueUI() {
     }
 }
 
-// Обновление списка участников
-document.getElementById('btn-participants').addEventListener('click', () => {
+function showParticipants() {
     const list = document.getElementById('participants-list');
     list.innerHTML = '';
     const sorted = [...participants].sort((a,b) => (a.ts - b.ts) || (a.nonce - b.nonce));
@@ -350,7 +337,7 @@ document.getElementById('btn-participants').addEventListener('click', () => {
         list.appendChild(btn);
     });
     showScreen('screen-participants');
-});
+}
 
 // Регистрация Service Worker
 if ('serviceWorker' in navigator) {
@@ -359,4 +346,11 @@ if ('serviceWorker' in navigator) {
             .then(reg => console.log('SW registered'))
             .catch(err => console.log('SW registration failed', err));
     });
-    }
+}
+
+// При запуске проверяем, был ли принят отказ
+if (localStorage.getItem('disclaimer_accepted') === '1') {
+    showScreen('screen-event');
+} else {
+    showScreen('screen-disclaimer');
+                  }
