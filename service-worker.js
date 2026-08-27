@@ -1,4 +1,4 @@
-const CACHE_NAME = 'queue-cache-v1';
+const CACHE_NAME = 'queue-cache-v2';
 const urlsToCache = [
   './',
   './index.html',
@@ -6,7 +6,8 @@ const urlsToCache = [
   './app.js',
   './manifest.json',
   './icons/icon-192.png',
-  './icons/icon-512.png'
+  './icons/icon-512.png',
+  './background.png'
 ];
 
 self.addEventListener('install', event => {
