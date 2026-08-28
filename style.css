@@ -75,6 +75,18 @@ h1 {
     font-size: 1.1rem;
 }
 
+/* Стили для неактивных кнопок */
+.event-button:disabled,
+.city-button:disabled,
+.action-button:disabled,
+.primary-button:disabled,
+.secondary-button:disabled {
+    background-color: #555555;
+    color: #aaaaaa;
+    cursor: not-allowed;
+    opacity: 0.7;
+}
+
 .username-block textarea {
     width: 100%;
     min-height: 90px;
