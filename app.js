@@ -21,6 +21,12 @@ let currentCity = null;
 let mqttClient;
 let timerInterval;
 
+// Защита от множественных нажатий и rate limiting
+let isSending = false;
+let lastPublishTime = 0;
+const publishMinInterval = 200; // мс
+let joinCheckTimer = null;
+
 // DOM элементы
 const screenDisclaimer = document.getElementById('screen-disclaimer');
 const screenEvent = document.getElementById('screen-event');
@@ -83,6 +89,11 @@ function selectEvent(event) {
 }
 
 function selectCity(city) {
+    // Если есть активный таймер проверки join, отменяем его
+    if (joinCheckTimer) {
+        clearTimeout(joinCheckTimer);
+        joinCheckTimer = null;
+    }
     selectedCity = city;
     connectMQTT();
     showScreen('screen-queue');
@@ -145,6 +156,23 @@ function connectMQTT() {
 
     if (timerInterval) clearInterval(timerInterval);
     timerInterval = setInterval(updateQueueUI, 1000);
+}
+
+// Отправка сообщения с учётом rate limiting
+function publishWithRateLimit(topic, payload, callback) {
+    const now = Date.now();
+    const delay = Math.max(0, publishMinInterval - (now - lastPublishTime));
+    setTimeout(() => {
+        if (mqttClient && mqttClient.connected) {
+            mqttClient.publish(topic, payload, { qos: 0 }, () => {
+                lastPublishTime = Date.now();
+                if (callback) callback();
+            });
+        } else {
+            // Если нет соединения, просто сбрасываем флаг
+            if (callback) callback();
+        }
+    }, delay);
 }
 
 function handleMessage(msgType, message) {
@@ -220,11 +248,17 @@ function publishSnapshot() {
         last_nonce: Math.floor(Math.random() * 1e9),
         queue: participants
     };
-    mqttClient.publish(`event/${currentEventId}/${currentCity}/snapshot`, JSON.stringify(snapshot), { retain: true, qos: 0 });
+    publishWithRateLimit(`event/${currentEventId}/${currentCity}/snapshot`, JSON.stringify(snapshot), null);
 }
 
 function joinQueue() {
+    if (isSending) return;
     if (!mqttClient || !mqttClient.connected) return;
+
+    isSending = true;
+    document.getElementById('btn-join').disabled = true;
+    document.getElementById('btn-join').textContent = 'Мы уже ставим вас в очередь...';
+
     const joinMsg = {
         client_id: myClientId,
         username: myUsername,
@@ -232,20 +266,58 @@ function joinQueue() {
         ts: Math.floor(Date.now() / 1000),
         nonce: Math.floor(Math.random() * 1e15)
     };
-    mqttClient.publish(`event/${currentEventId}/${currentCity}/join`, JSON.stringify(joinMsg), { qos: 0 });
-    addOrUpdateParticipant({
-        client_id: myClientId,
-        username: myUsername,
-        status: 'waiting',
-        ts: joinMsg.ts,
-        nonce: joinMsg.nonce
+
+    publishWithRateLimit(`event/${currentEventId}/${currentCity}/join`, JSON.stringify(joinMsg), () => {
+        isSending = false;
+        // Локально добавляем себя
+        addOrUpdateParticipant({
+            client_id: myClientId,
+            username: myUsername,
+            status: 'waiting',
+            ts: joinMsg.ts,
+            nonce: joinMsg.nonce
+        });
+        applyAfkRule();
+        updateQueueUI();
+        // Запускаем проверку появления в очереди
+        joinCheckTimer = setTimeout(checkJoinResult, 10000);
     });
-    applyAfkRule();
-    updateQueueUI();
+}
+
+function checkJoinResult() {
+    const myParticipant = participants.find(p => p.client_id === myClientId);
+    if (myParticipant) {
+        joinCheckTimer = null;
+        updateQueueUI();
+    } else {
+        // Повторная отправка join
+        const joinMsg = {
+            client_id: myClientId,
+            username: myUsername,
+            city: currentCity,
+            ts: Math.floor(Date.now() / 1000),
+            nonce: Math.floor(Math.random() * 1e15)
+        };
+        publishWithRateLimit(`event/${currentEventId}/${currentCity}/join`, JSON.stringify(joinMsg), () => {
+            joinCheckTimer = setTimeout(checkJoinResult, 10000);
+        });
+    }
 }
 
 function sendAction(actionType) {
+    if (isSending) return;
     if (!mqttClient || !mqttClient.connected) return;
+
+    const myParticipant = participants.find(p => p.client_id === myClientId);
+    if (!myParticipant) return;
+
+    // Дополнительные проверки статуса
+    if (actionType === 'received' && !['waiting', 'afk'].includes(myParticipant.status)) return;
+    if (actionType === 'here' && myParticipant.status !== 'afk') return;
+    if (actionType === 'leave' && !myParticipant) return;
+
+    isSending = true;
+
     const actionMsg = {
         client_id: myClientId,
         type: actionType,
@@ -253,13 +325,22 @@ function sendAction(actionType) {
         nonce: Math.floor(Math.random() * 1e15),
         city: currentCity
     };
-    mqttClient.publish(`event/${currentEventId}/${currentCity}/action`, JSON.stringify(actionMsg), { qos: 0 });
-    if (actionType === 'received' || actionType === 'here') applyAction(myClientId, actionType);
-    if (actionType === 'leave') {
-        participants = participants.filter(p => p.client_id !== myClientId);
-    }
-    applyAfkRule();
-    updateQueueUI();
+
+    publishWithRateLimit(`event/${currentEventId}/${currentCity}/action`, JSON.stringify(actionMsg), () => {
+        isSending = false;
+        if (actionType === 'received' || actionType === 'here') {
+            applyAction(myClientId, actionType);
+        } else if (actionType === 'leave') {
+            participants = participants.filter(p => p.client_id !== myClientId);
+            // Отменяем таймер проверки join, если есть
+            if (joinCheckTimer) {
+                clearTimeout(joinCheckTimer);
+                joinCheckTimer = null;
+            }
+        }
+        applyAfkRule();
+        updateQueueUI();
+    });
 }
 
 function updateQueueUI() {
@@ -317,6 +398,14 @@ function updateQueueUI() {
     } else if (status === 'received') {
         joinBtn.textContent = 'Встать в очередь снова';
         joinBtn.disabled = false;
+    }
+
+    // Если идёт отправка, блокируем все кнопки
+    if (isSending) {
+        joinBtn.disabled = true;
+        receivedBtn.disabled = true;
+        hereBtn.disabled = true;
+        leaveBtn.disabled = true;
     }
 }
 
