@@ -32,7 +32,7 @@ const modalInfo = document.getElementById('modal-info');
 const usernameInput = document.getElementById('username-input');
 usernameInput.value = myUsername;
 
-// Инициализация
+// Инициализация обработчиков
 document.getElementById('btn-accept-disclaimer').addEventListener('click', acceptDisclaimer);
 document.getElementById('btn-event-vkusno').addEventListener('click', () => selectEvent(EVENT));
 document.getElementById('btn-next').addEventListener('click', () => {
@@ -353,4 +353,7 @@ if (localStorage.getItem('disclaimer_accepted') === '1') {
     showScreen('screen-event');
 } else {
     showScreen('screen-disclaimer');
-                  }
+}
+
+// Устанавливаем начальное состояние кнопок
+updateQueueUI();
