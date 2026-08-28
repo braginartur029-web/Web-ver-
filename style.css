@@ -30,7 +30,7 @@ body {
 
 .screen.active {
     display: flex;
-    animation: fadeIn 0.3s ease forwards;
+    animation: fadeIn 0.5s ease forwards;
 }
 
 @keyframes fadeIn {
