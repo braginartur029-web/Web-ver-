@@ -89,7 +89,6 @@ function selectEvent(event) {
 }
 
 function selectCity(city) {
-    // Если есть активный таймер проверки join, отменяем его
     if (joinCheckTimer) {
         clearTimeout(joinCheckTimer);
         joinCheckTimer = null;
@@ -169,7 +168,6 @@ function publishWithRateLimit(topic, payload, callback) {
                 if (callback) callback();
             });
         } else {
-            // Если нет соединения, просто сбрасываем флаг
             if (callback) callback();
         }
     }, delay);
@@ -251,9 +249,75 @@ function publishSnapshot() {
     publishWithRateLimit(`event/${currentEventId}/${currentCity}/snapshot`, JSON.stringify(snapshot), null);
 }
 
+// Функции для защиты от перекупов (локальное состояние)
+function loadState() {
+    try {
+        return JSON.parse(localStorage.getItem('queue_state')) || {};
+    } catch (e) {
+        return {};
+    }
+}
+
+function saveState(state) {
+    localStorage.setItem('queue_state', JSON.stringify(state));
+}
+
+function getCooldownRemaining() {
+    const state = loadState();
+    const until = state.cooldownUntil || 0;
+    return Math.max(0, Math.floor((until - Date.now()) / 1000));
+}
+
+function setCooldown(seconds) {
+    const state = loadState();
+    state.cooldownUntil = Date.now() + seconds * 1000;
+    saveState(state);
+}
+
+function isRepeatFlagSet() {
+    const state = loadState();
+    return !!state.repeatFlag;
+}
+
+function setRepeatFlag() {
+    const state = loadState();
+    state.repeatFlag = true;
+    saveState(state);
+}
+
+function hasDuplicateClientId() {
+    return participants.some(p => p.client_id === myClientId && ['waiting', 'afk'].includes(p.status));
+}
+
+function hasDuplicateUsername(username) {
+    return participants.some(p => p.username === username && ['waiting', 'afk'].includes(p.status));
+}
+
 function joinQueue() {
     if (isSending) return;
     if (!mqttClient || !mqttClient.connected) return;
+
+    // Проверка дубликата client_id
+    if (hasDuplicateClientId()) {
+        document.getElementById('btn-join').textContent = 'Вы уже в очереди';
+        document.getElementById('btn-join').disabled = true;
+        return;
+    }
+
+    // Проверка дубликата username
+    if (hasDuplicateUsername(myUsername)) {
+        document.getElementById('btn-join').textContent = 'Этот username уже в очереди';
+        document.getElementById('btn-join').disabled = true;
+        return;
+    }
+
+    // Проверка кулдауна
+    const cooldown = getCooldownRemaining();
+    if (cooldown > 0) {
+        document.getElementById('btn-join').disabled = true;
+        document.getElementById('btn-join').textContent = `Подождите ${Math.floor(cooldown / 60)}:${String(cooldown % 60).padStart(2, '0')}`;
+        return;
+    }
 
     isSending = true;
     document.getElementById('btn-join').disabled = true;
@@ -269,7 +333,6 @@ function joinQueue() {
 
     publishWithRateLimit(`event/${currentEventId}/${currentCity}/join`, JSON.stringify(joinMsg), () => {
         isSending = false;
-        // Локально добавляем себя
         addOrUpdateParticipant({
             client_id: myClientId,
             username: myUsername,
@@ -279,7 +342,6 @@ function joinQueue() {
         });
         applyAfkRule();
         updateQueueUI();
-        // Запускаем проверку появления в очереди
         joinCheckTimer = setTimeout(checkJoinResult, 10000);
     });
 }
@@ -290,7 +352,6 @@ function checkJoinResult() {
         joinCheckTimer = null;
         updateQueueUI();
     } else {
-        // Повторная отправка join
         const joinMsg = {
             client_id: myClientId,
             username: myUsername,
@@ -311,7 +372,6 @@ function sendAction(actionType) {
     const myParticipant = participants.find(p => p.client_id === myClientId);
     if (!myParticipant) return;
 
-    // Дополнительные проверки статуса
     if (actionType === 'received' && !['waiting', 'afk'].includes(myParticipant.status)) return;
     if (actionType === 'here' && myParticipant.status !== 'afk') return;
     if (actionType === 'leave' && !myParticipant) return;
@@ -330,9 +390,12 @@ function sendAction(actionType) {
         isSending = false;
         if (actionType === 'received' || actionType === 'here') {
             applyAction(myClientId, actionType);
+            if (actionType === 'received') {
+                setCooldown(300);
+                setRepeatFlag();
+            }
         } else if (actionType === 'leave') {
             participants = participants.filter(p => p.client_id !== myClientId);
-            // Отменяем таймер проверки join, если есть
             if (joinCheckTimer) {
                 clearTimeout(joinCheckTimer);
                 joinCheckTimer = null;
@@ -361,7 +424,11 @@ function updateQueueUI() {
     const statusMap = { waiting: 'Ожидает', received: 'Получил', afk: 'Неактивен' };
 
     if (status) {
-        statusText = `Ваш статус: ${statusMap[status]}`;
+        if (status === 'waiting' && isRepeatFlagSet()) {
+            statusText = 'Ваш статус: Ожидает повторно';
+        } else {
+            statusText = `Ваш статус: ${statusMap[status]}`;
+        }
         const activeParticipants = participants.filter(p => p.status === 'waiting').sort((a,b) => (a.ts - b.ts) || (a.nonce - b.nonce));
         const pos = activeParticipants.findIndex(p => p.client_id === myClientId);
         if (pos !== -1) positionText = `Ваш номер: #${pos + 1}`;
@@ -375,16 +442,30 @@ function updateQueueUI() {
     const hereBtn = document.getElementById('btn-here');
     const leaveBtn = document.getElementById('btn-leave');
 
+    // Сначала сбрасываем все кнопки в неактивное состояние
     joinBtn.disabled = false;
     receivedBtn.disabled = true;
     hereBtn.disabled = true;
     leaveBtn.disabled = true;
     joinBtn.textContent = 'Встать в очередь';
 
-    if (now < start && !status) {
+    // Если событие ещё не началось
+    if (now < start) {
         joinBtn.disabled = true;
         joinBtn.textContent = `Очередь откроется через ${hours}:${minutes}:${seconds}`;
-    } else if (status === 'waiting') {
+        return;
+    }
+
+    // Кулдаун имеет приоритет
+    const cooldown = getCooldownRemaining();
+    if (cooldown > 0) {
+        joinBtn.disabled = true;
+        joinBtn.textContent = `Подождите ${Math.floor(cooldown / 60)}:${String(cooldown % 60).padStart(2, '0')}`;
+        return;
+    }
+
+    // Логика в зависимости от статуса
+    if (status === 'waiting') {
         joinBtn.disabled = true;
         joinBtn.textContent = 'Вы в очереди';
         receivedBtn.disabled = false;
@@ -396,16 +477,23 @@ function updateQueueUI() {
         hereBtn.disabled = false;
         leaveBtn.disabled = false;
     } else if (status === 'received') {
-        joinBtn.textContent = 'Встать в очередь снова';
         joinBtn.disabled = false;
+        joinBtn.textContent = 'Встать в очередь снова';
+    } else {
+        // Пользователь не в очереди
+        joinBtn.disabled = false;
+        joinBtn.textContent = 'Встать в очередь';
     }
 
-    // Если идёт отправка, блокируем все кнопки
+    // Во время отправки блокируем все кнопки
     if (isSending) {
         joinBtn.disabled = true;
         receivedBtn.disabled = true;
         hereBtn.disabled = true;
         leaveBtn.disabled = true;
+        if (status === null) {
+            joinBtn.textContent = 'Мы уже ставим вас в очередь...';
+        }
     }
 }
 
