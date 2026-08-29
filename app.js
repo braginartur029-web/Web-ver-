@@ -13,6 +13,10 @@ if (!myClientId) {
 }
 
 let myUsername = localStorage.getItem('username') || '';
+// Нормализуем: если сохранённый username не начинается с @, добавляем
+if (myUsername && !myUsername.startsWith('@')) {
+    myUsername = '@' + myUsername;
+}
 let selectedEvent = EVENT;
 let selectedCity = null;
 let participants = [];
@@ -47,7 +51,8 @@ document.getElementById('btn-next').addEventListener('click', () => {
         alert('Обязательно введите username!');
         return;
     }
-    myUsername = username;
+    // Автоматически добавляем @, если его нет
+    myUsername = username.startsWith('@') ? username : '@' + username;
     localStorage.setItem('username', myUsername);
     showScreen('screen-city');
 });
@@ -442,21 +447,18 @@ function updateQueueUI() {
     const hereBtn = document.getElementById('btn-here');
     const leaveBtn = document.getElementById('btn-leave');
 
-    // Сначала сбрасываем все кнопки в неактивное состояние
     joinBtn.disabled = false;
     receivedBtn.disabled = true;
     hereBtn.disabled = true;
     leaveBtn.disabled = true;
     joinBtn.textContent = 'Встать в очередь';
 
-    // Если событие ещё не началось
     if (now < start) {
         joinBtn.disabled = true;
         joinBtn.textContent = `Очередь откроется через ${hours}:${minutes}:${seconds}`;
         return;
     }
 
-    // Кулдаун имеет приоритет
     const cooldown = getCooldownRemaining();
     if (cooldown > 0) {
         joinBtn.disabled = true;
@@ -464,7 +466,6 @@ function updateQueueUI() {
         return;
     }
 
-    // Логика в зависимости от статуса
     if (status === 'waiting') {
         joinBtn.disabled = true;
         joinBtn.textContent = 'Вы в очереди';
@@ -480,12 +481,10 @@ function updateQueueUI() {
         joinBtn.disabled = false;
         joinBtn.textContent = 'Встать в очередь снова';
     } else {
-        // Пользователь не в очереди
         joinBtn.disabled = false;
         joinBtn.textContent = 'Встать в очередь';
     }
 
-    // Во время отправки блокируем все кнопки
     if (isSending) {
         joinBtn.disabled = true;
         receivedBtn.disabled = true;
