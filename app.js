@@ -13,10 +13,10 @@ if (!myClientId) {
 }
 
 let myUsername = localStorage.getItem('username') || '';
-// Нормализуем: если сохранённый username не начинается с @, добавляем
 if (myUsername && !myUsername.startsWith('@')) {
     myUsername = '@' + myUsername;
 }
+
 let selectedEvent = EVENT;
 let selectedCity = null;
 let participants = [];
@@ -31,8 +31,12 @@ let lastPublishTime = 0;
 const publishMinInterval = 200; // мс
 let joinCheckTimer = null;
 
-// Множество ID пользователей, которые вышли из очереди (аналог left_clients)
+// Tombstone: множество ID вышедших пользователей
 let leftClients = new Set();
+
+// Версия снапшота и время последнего изменения очереди
+let snapshotVersion = 0;
+let lastChangeTime = 0;
 
 // DOM элементы
 const screenDisclaimer = document.getElementById('screen-disclaimer');
@@ -54,7 +58,6 @@ document.getElementById('btn-next').addEventListener('click', () => {
         alert('Обязательно введите username!');
         return;
     }
-    // Автоматически добавляем @, если его нет
     myUsername = username.startsWith('@') ? username : '@' + username;
     localStorage.setItem('username', myUsername);
     showScreen('screen-city');
@@ -102,8 +105,11 @@ function selectCity(city) {
         joinCheckTimer = null;
     }
     selectedCity = city;
-    // Очищаем список вышедших при смене города/события
+    // Очищаем состояние для нового события/города
     leftClients.clear();
+    snapshotVersion = 0;
+    lastChangeTime = 0;
+    participants = [];
     connectMQTT();
     showScreen('screen-queue');
     updateQueueUI();
@@ -211,9 +217,11 @@ function addOrUpdateParticipant(p) {
     if (existing) {
         if (p.ts > existing.ts || (p.ts === existing.ts && p.nonce > existing.nonce)) {
             Object.assign(existing, p);
+            lastChangeTime = Date.now();
         }
     } else {
         participants.push(p);
+        lastChangeTime = Date.now();
     }
     // Если пользователь вернулся, убираем его из leftClients
     leftClients.delete(p.client_id);
@@ -222,14 +230,19 @@ function addOrUpdateParticipant(p) {
 function applyAction(clientId, actionType) {
     const p = participants.find(x => x.client_id === clientId);
     if (!p) return;
+
     if (actionType === 'received') {
         p.status = 'received';
+        lastChangeTime = Date.now();
     } else if (actionType === 'here') {
-        if (p.status === 'afk') p.status = 'waiting';
+        if (p.status === 'afk') {
+            p.status = 'waiting';
+            lastChangeTime = Date.now();
+        }
     } else if (actionType === 'leave') {
-        // Добавляем в leftClients и удаляем из участников
         leftClients.add(clientId);
         participants = participants.filter(x => x.client_id !== clientId);
+        lastChangeTime = Date.now();
     }
 }
 
@@ -241,7 +254,10 @@ function applyAfkRule() {
         if (p.status === 'received') {
             receivedCount++;
         } else if (p.status === 'waiting') {
-            if (receivedCount >= 5) p.status = 'afk';
+            if (receivedCount >= 5) {
+                p.status = 'afk';
+                lastChangeTime = Date.now();
+            }
         }
     }
     participants = sorted;
@@ -249,18 +265,38 @@ function applyAfkRule() {
 
 function loadSnapshot(snapshot) {
     if (!snapshot || !snapshot.queue) return;
-    // Загружаем только тех, кто не вышел (не в leftClients)
-    participants = snapshot.queue
-        .filter(p => !leftClients.has(p.client_id))
-        .map(p => ({ ...p }));
+    // Игнорируем устаревшие или равные снапшоты
+    if (snapshot.version <= snapshotVersion) return;
+
+    snapshotVersion = snapshot.version;
+    const now = Date.now();
+
+    // Слияние: добавляем новые записи, обновляем существующие при необходимости
+    snapshot.queue.forEach(p => {
+        if (leftClients.has(p.client_id)) return;
+
+        const existing = participants.find(x => x.client_id === p.client_id);
+        if (!existing) {
+            participants.push({ ...p });
+            lastChangeTime = now;
+        } else {
+            if ((p.ts > existing.ts) || (p.ts === existing.ts && p.nonce > existing.nonce)) {
+                Object.assign(existing, p);
+                lastChangeTime = now;
+            }
+        }
+    });
+
+    // Применяем AFK-правило после слияния
+    applyAfkRule();
 }
 
 function publishSnapshot() {
     if (!currentEventId || !currentCity) return;
     const snapshot = {
-        version: Date.now(),
-        last_ts: Date.now(),
-        last_nonce: Math.floor(Math.random() * 1e9),
+        version: Date.now(), // используем текущее время как версию
+        last_ts: Date.now() / 1000,
+        last_nonce: Math.floor(Math.random() * 1e15),
         queue: participants
     };
     publishWithRateLimit(`event/${currentEventId}/${currentCity}/snapshot`, JSON.stringify(snapshot), null);
@@ -314,21 +350,18 @@ function joinQueue() {
     if (isSending) return;
     if (!mqttClient || !mqttClient.connected) return;
 
-    // Проверка дубликата client_id
     if (hasDuplicateClientId()) {
         document.getElementById('btn-join').textContent = 'Вы уже в очереди';
         document.getElementById('btn-join').disabled = true;
         return;
     }
 
-    // Проверка дубликата username
     if (hasDuplicateUsername(myUsername)) {
         document.getElementById('btn-join').textContent = 'Этот username уже в очереди';
         document.getElementById('btn-join').disabled = true;
         return;
     }
 
-    // Проверка кулдауна
     const cooldown = getCooldownRemaining();
     if (cooldown > 0) {
         document.getElementById('btn-join').disabled = true;
@@ -344,7 +377,7 @@ function joinQueue() {
         client_id: myClientId,
         username: myUsername,
         city: currentCity,
-        ts: Math.floor(Date.now() / 1000),
+        ts: Date.now() / 1000, // дробное время
         nonce: Math.floor(Math.random() * 1e15)
     };
 
@@ -373,7 +406,7 @@ function checkJoinResult() {
             client_id: myClientId,
             username: myUsername,
             city: currentCity,
-            ts: Math.floor(Date.now() / 1000),
+            ts: Date.now() / 1000,
             nonce: Math.floor(Math.random() * 1e15)
         };
         publishWithRateLimit(`event/${currentEventId}/${currentCity}/join`, JSON.stringify(joinMsg), () => {
@@ -398,7 +431,7 @@ function sendAction(actionType) {
     const actionMsg = {
         client_id: myClientId,
         type: actionType,
-        ts: Math.floor(Date.now() / 1000),
+        ts: Date.now() / 1000,
         nonce: Math.floor(Math.random() * 1e15),
         city: currentCity
     };
@@ -413,14 +446,13 @@ function sendAction(actionType) {
             }
             publishSnapshot();
         } else if (actionType === 'leave') {
-            // Добавляем себя в leftClients и удаляем из списка
             leftClients.add(myClientId);
             participants = participants.filter(p => p.client_id !== myClientId);
+            lastChangeTime = Date.now();
             if (joinCheckTimer) {
                 clearTimeout(joinCheckTimer);
                 joinCheckTimer = null;
             }
-            // Публикуем свежий снапшот
             publishSnapshot();
         }
         applyAfkRule();
@@ -451,9 +483,16 @@ function updateQueueUI() {
         } else {
             statusText = `Ваш статус: ${statusMap[status]}`;
         }
+
         const activeParticipants = participants.filter(p => p.status === 'waiting').sort((a,b) => (a.ts - b.ts) || (a.nonce - b.nonce));
         const pos = activeParticipants.findIndex(p => p.client_id === myClientId);
-        if (pos !== -1) positionText = `Ваш номер: #${pos + 1}`;
+        if (pos !== -1) {
+            if (Date.now() - lastChangeTime < 2000) {
+                positionText = 'Синхронизация очереди...';
+            } else {
+                positionText = `Ваш номер: #${pos + 1}`;
+            }
+        }
     }
 
     document.getElementById('queue-status').textContent = statusText;
