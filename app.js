@@ -399,12 +399,15 @@ function sendAction(actionType) {
                 setCooldown(300);
                 setRepeatFlag();
             }
+            publishSnapshot();
         } else if (actionType === 'leave') {
             participants = participants.filter(p => p.client_id !== myClientId);
             if (joinCheckTimer) {
                 clearTimeout(joinCheckTimer);
                 joinCheckTimer = null;
             }
+            // Публикуем свежий снапшот после выхода
+            publishSnapshot();
         }
         applyAfkRule();
         updateQueueUI();
