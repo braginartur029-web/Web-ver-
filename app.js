@@ -31,6 +31,9 @@ let lastPublishTime = 0;
 const publishMinInterval = 200; // мс
 let joinCheckTimer = null;
 
+// Множество ID пользователей, которые вышли из очереди (аналог left_clients)
+let leftClients = new Set();
+
 // DOM элементы
 const screenDisclaimer = document.getElementById('screen-disclaimer');
 const screenEvent = document.getElementById('screen-event');
@@ -99,6 +102,8 @@ function selectCity(city) {
         joinCheckTimer = null;
     }
     selectedCity = city;
+    // Очищаем список вышедших при смене города/события
+    leftClients.clear();
     connectMQTT();
     showScreen('screen-queue');
     updateQueueUI();
@@ -210,6 +215,8 @@ function addOrUpdateParticipant(p) {
     } else {
         participants.push(p);
     }
+    // Если пользователь вернулся, убираем его из leftClients
+    leftClients.delete(p.client_id);
 }
 
 function applyAction(clientId, actionType) {
@@ -220,6 +227,8 @@ function applyAction(clientId, actionType) {
     } else if (actionType === 'here') {
         if (p.status === 'afk') p.status = 'waiting';
     } else if (actionType === 'leave') {
+        // Добавляем в leftClients и удаляем из участников
+        leftClients.add(clientId);
         participants = participants.filter(x => x.client_id !== clientId);
     }
 }
@@ -240,7 +249,10 @@ function applyAfkRule() {
 
 function loadSnapshot(snapshot) {
     if (!snapshot || !snapshot.queue) return;
-    participants = snapshot.queue.map(p => ({ ...p }));
+    // Загружаем только тех, кто не вышел (не в leftClients)
+    participants = snapshot.queue
+        .filter(p => !leftClients.has(p.client_id))
+        .map(p => ({ ...p }));
 }
 
 function publishSnapshot() {
@@ -401,12 +413,14 @@ function sendAction(actionType) {
             }
             publishSnapshot();
         } else if (actionType === 'leave') {
+            // Добавляем себя в leftClients и удаляем из списка
+            leftClients.add(myClientId);
             participants = participants.filter(p => p.client_id !== myClientId);
             if (joinCheckTimer) {
                 clearTimeout(joinCheckTimer);
                 joinCheckTimer = null;
             }
-            // Публикуем свежий снапшот после выхода
+            // Публикуем свежий снапшот
             publishSnapshot();
         }
         applyAfkRule();
