@@ -38,6 +38,9 @@ let leftClients = new Set();
 let snapshotVersion = 0;
 let lastChangeTime = 0;
 
+// Флаг, указывающий, что пользователь находится в процессе входа в очередь
+let isJoining = false;
+
 // DOM элементы
 const screenDisclaimer = document.getElementById('screen-disclaimer');
 const screenEvent = document.getElementById('screen-event');
@@ -110,6 +113,7 @@ function selectCity(city) {
     snapshotVersion = 0;
     lastChangeTime = 0;
     participants = [];
+    isJoining = false; // сбрасываем флаг входа
     connectMQTT();
     showScreen('screen-queue');
     updateQueueUI();
@@ -265,13 +269,11 @@ function applyAfkRule() {
 
 function loadSnapshot(snapshot) {
     if (!snapshot || !snapshot.queue) return;
-    // Игнорируем устаревшие или равные снапшоты
     if (snapshot.version <= snapshotVersion) return;
 
     snapshotVersion = snapshot.version;
     const now = Date.now();
 
-    // Слияние: добавляем новые записи, обновляем существующие при необходимости
     snapshot.queue.forEach(p => {
         if (leftClients.has(p.client_id)) return;
 
@@ -287,14 +289,13 @@ function loadSnapshot(snapshot) {
         }
     });
 
-    // Применяем AFK-правило после слияния
     applyAfkRule();
 }
 
 function publishSnapshot() {
     if (!currentEventId || !currentCity) return;
     const snapshot = {
-        version: Date.now(), // используем текущее время как версию
+        version: Date.now(),
         last_ts: Date.now() / 1000,
         last_nonce: Math.floor(Math.random() * 1e15),
         queue: participants
@@ -370,6 +371,7 @@ function joinQueue() {
     }
 
     isSending = true;
+    isJoining = true; // начинаем процесс входа
     document.getElementById('btn-join').disabled = true;
     document.getElementById('btn-join').textContent = 'Мы уже ставим вас в очередь...';
 
@@ -377,7 +379,7 @@ function joinQueue() {
         client_id: myClientId,
         username: myUsername,
         city: currentCity,
-        ts: Date.now() / 1000, // дробное время
+        ts: Date.now() / 1000,
         nonce: Math.floor(Math.random() * 1e15)
     };
 
@@ -399,6 +401,7 @@ function joinQueue() {
 function checkJoinResult() {
     const myParticipant = participants.find(p => p.client_id === myClientId);
     if (myParticipant) {
+        isJoining = false; // вход подтверждён
         joinCheckTimer = null;
         updateQueueUI();
     } else {
@@ -453,6 +456,7 @@ function sendAction(actionType) {
                 clearTimeout(joinCheckTimer);
                 joinCheckTimer = null;
             }
+            isJoining = false; // после выхода сбрасываем флаг
             publishSnapshot();
         }
         applyAfkRule();
@@ -487,7 +491,7 @@ function updateQueueUI() {
         const activeParticipants = participants.filter(p => p.status === 'waiting').sort((a,b) => (a.ts - b.ts) || (a.nonce - b.nonce));
         const pos = activeParticipants.findIndex(p => p.client_id === myClientId);
         if (pos !== -1) {
-            if (Date.now() - lastChangeTime < 2000) {
+            if (isJoining) {
                 positionText = 'Синхронизация очереди...';
             } else {
                 positionText = `Ваш номер: #${pos + 1}`;
