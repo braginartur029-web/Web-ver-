@@ -6,7 +6,7 @@ const EVENT = {
 };
 
 // Пароль администратора
-const ADMIN_PASSWORD = 'K1,a2,t8.';
+const ADMIN_PASSWORD = 'PodAranarami';
 
 // Состояние
 let myClientId = localStorage.getItem('client_id');
